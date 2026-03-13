@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Space_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
+import { GlobalAudioProvider, GlobalPlayerBar } from "@/components/global-player";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -26,6 +27,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AuthProvider>
           <div className="scanlines" />
           {children}
+          <GlobalAudioProvider />
+          <GlobalPlayerBar />
         </AuthProvider>
       </body>
     </html>

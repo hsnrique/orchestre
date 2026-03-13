@@ -3,11 +3,13 @@
 import { useEffect, useState, useRef } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/firebase";
-import { collection, query, where, orderBy, getDocs, deleteDoc, doc } from "firebase/firestore";
-import { Badge } from "@/components/ui/badge";
+import { collection, query, where, orderBy, getDocs, deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { usePlayerStore } from "@/stores/player-store";
+import { Play, Pause, Trash2, Search, Globe, Lock, Eye, Music2 } from "lucide-react";
 import gsap from "gsap";
+import Link from "next/link";
 
 interface Track {
   id: string;
@@ -18,7 +20,10 @@ interface Track {
   audioUrl: string;
   lyrics: string;
   bpm: number;
-  instruments: string[];
+  isPublic: boolean;
+  plays: number;
+  likes: number;
+  username?: string;
   createdAt: { seconds: number };
 }
 
@@ -27,332 +32,288 @@ export default function LibraryPage() {
   const [tracks, setTracks] = useState<Track[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [selectedTrack, setSelectedTrack] = useState<Track | null>(null);
-  const [playingId, setPlayingId] = useState<string | null>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const gridRef = useRef<HTMLDivElement>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  const currentTrack = usePlayerStore((s) => s.currentTrack);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const play = usePlayerStore((s) => s.play);
+  const togglePlay = usePlayerStore((s) => s.togglePlay);
 
   useEffect(() => {
     if (!user) return;
-    const fetchTracks = async () => {
+    (async () => {
       const q = query(collection(db, "tracks"), where("userId", "==", user.uid), orderBy("createdAt", "desc"));
       const snapshot = await getDocs(q);
       setTracks(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })) as Track[]);
       setLoading(false);
-    };
-    fetchTracks();
+    })();
   }, [user]);
 
   useEffect(() => {
-    if (gridRef.current && tracks.length > 0) {
-      gsap.fromTo(gridRef.current.children, { opacity: 0, y: 15, scale: 0.97 },
-        { opacity: 1, y: 0, scale: 1, stagger: 0.04, duration: 0.5, ease: "power3.out" });
+    if (listRef.current && tracks.length > 0) {
+      gsap.fromTo(listRef.current.children,
+        { opacity: 0, y: 12 },
+        { opacity: 1, y: 0, stagger: 0.03, duration: 0.4, ease: "power3.out" }
+      );
     }
   }, [tracks]);
 
-  const deleteTrack = async (trackId: string) => {
-    await deleteDoc(doc(db, "tracks", trackId));
-    setTracks((prev) => prev.filter((t) => t.id !== trackId));
-    if (selectedTrack?.id === trackId) setSelectedTrack(null);
-    if (playingId === trackId) { setPlayingId(null); audioRef.current?.pause(); }
-  };
-
-  const togglePlay = (track: Track) => {
-    if (!audioRef.current) return;
-    if (playingId === track.id) {
-      audioRef.current.pause();
-      setPlayingId(null);
+  const handlePlay = (track: Track) => {
+    if (currentTrack?.id === track.id) {
+      togglePlay();
     } else {
-      audioRef.current.src = track.audioUrl;
-      audioRef.current.play();
-      setPlayingId(track.id);
+      const queue = filtered.filter((t) => t.audioUrl).map((t) => ({
+        id: t.id, title: t.title, audioUrl: t.audioUrl,
+        coverUrl: t.coverUrl, username: t.username,
+      }));
+      const target = queue.find((q) => q.id === track.id);
+      if (target) play(target, queue);
     }
   };
 
+  const handleDelete = async (trackId: string) => {
+    await deleteDoc(doc(db, "tracks", trackId));
+    setTracks((prev) => prev.filter((t) => t.id !== trackId));
+  };
+
+  const handleTogglePublic = async (trackId: string) => {
+    const track = tracks.find((t) => t.id === trackId);
+    if (!track) return;
+    const newVal = !track.isPublic;
+    setTracks((prev) => prev.map((t) => t.id === trackId ? { ...t, isPublic: newVal } : t));
+    await updateDoc(doc(db, "tracks", trackId), { isPublic: newVal });
+  };
+
   const filtered = tracks.filter(
-    (t) => t.title.toLowerCase().includes(search.toLowerCase()) || t.genre.toLowerCase().includes(search.toLowerCase())
+    (t) => t.title.toLowerCase().includes(search.toLowerCase()) ||
+           (t.genre && t.genre.toLowerCase().includes(search.toLowerCase()))
   );
 
   const formatDate = (ts: { seconds: number }) => {
     if (!ts) return "";
-    return new Date(ts.seconds * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    return new Date(ts.seconds * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric" });
   };
 
-  const nowPlaying = tracks.find((t) => t.id === playingId);
-
   return (
-    <div className="min-h-screen p-8" style={{ paddingBottom: nowPlaying ? "6rem" : undefined }}>
-      <audio ref={audioRef} onEnded={() => setPlayingId(null)} />
+    <div className="min-h-screen p-4 md:p-8 max-w-5xl mx-auto">
+      <header className="mb-6 md:mb-8">
+        <h1 className="text-2xl md:text-3xl font-bold synth-glow tracking-tight" style={{ fontFamily: "var(--font-mono)" }}>
+          Library
+        </h1>
+        <p className="text-xs md:text-sm text-muted-foreground mt-1">
+          {tracks.length} track{tracks.length !== 1 ? "s" : ""} in your collection
+        </p>
+      </header>
 
-      <div className="flex items-center justify-between mb-10">
-        <div>
-          <h1 className="text-3xl font-bold synth-glow tracking-tight" style={{ fontFamily: "var(--font-mono)" }}>Library</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {tracks.length} track{tracks.length !== 1 ? "s" : ""} in your collection
-          </p>
-        </div>
-        <Input placeholder="Search tracks..." value={search} onChange={(e) => setSearch(e.target.value)}
-          className="w-64 bg-white/[0.02] border-[#b14eff]/[0.08] focus:border-[#b14eff]/30 transition-colors" />
+      <div className="relative mb-6">
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="Search by title or genre..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-10 bg-white/[0.02] border-[#b14eff]/[0.08] focus:border-[#b14eff]/30 h-11 transition-colors"
+        />
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="w-6 h-6 border-2 border-[#b14eff] border-t-transparent rounded-full animate-spin" />
-        </div>
+        <LoadingState />
       ) : filtered.length === 0 ? (
         <EmptyState hasSearch={!!search} />
       ) : (
-        <div className="flex gap-6">
-          <div ref={gridRef} className="flex-1 grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filtered.map((track) => (
-              <TrackCard key={track.id} track={track}
-                isSelected={selectedTrack?.id === track.id}
-                isPlaying={playingId === track.id}
-                onSelect={() => setSelectedTrack(track)}
-                onPlay={() => togglePlay(track)}
-                onDelete={() => deleteTrack(track.id)} />
-            ))}
-          </div>
-
-          {selectedTrack && (
-            <TrackDetail track={selectedTrack} onClose={() => setSelectedTrack(null)}
-              formatDate={formatDate} isPlaying={playingId === selectedTrack.id}
-              onPlay={() => togglePlay(selectedTrack)} />
-          )}
+        <div ref={listRef} className="space-y-2">
+          {filtered.map((track) => (
+            <TrackRow
+              key={track.id}
+              track={track}
+              isActive={currentTrack?.id === track.id && isPlaying}
+              isExpanded={expandedId === track.id}
+              onToggleExpand={() => setExpandedId(expandedId === track.id ? null : track.id)}
+              onPlay={() => handlePlay(track)}
+              onDelete={() => handleDelete(track.id)}
+              onTogglePublic={() => handleTogglePublic(track.id)}
+              formatDate={formatDate}
+            />
+          ))}
         </div>
-      )}
-
-      {nowPlaying && (
-        <NowPlayingBar track={nowPlaying} audioRef={audioRef}
-          isPlaying={playingId === nowPlaying.id}
-          onToggle={() => togglePlay(nowPlaying)}
-          onStop={() => { audioRef.current?.pause(); setPlayingId(null); }} />
       )}
     </div>
   );
 }
 
-/* ─── Track Card ─────────────────────────────────────────────────────────── */
-
-function TrackCard({ track, isSelected, isPlaying, onSelect, onPlay, onDelete }: {
-  track: Track; isSelected: boolean; isPlaying: boolean;
-  onSelect: () => void; onPlay: () => void; onDelete: () => void;
+function TrackRow({ track, isActive, isExpanded, onToggleExpand, onPlay, onDelete, onTogglePublic, formatDate }: {
+  track: Track; isActive: boolean; isExpanded: boolean;
+  onToggleExpand: () => void; onPlay: () => void; onDelete: () => void;
+  onTogglePublic: () => void; formatDate: (ts: { seconds: number }) => string;
 }) {
   return (
-    <div onClick={onSelect}
-      className={`group cursor-pointer rounded-xl overflow-hidden transition-all duration-300 hover:scale-[1.02] ${
-        isSelected ? "neon-border-pink" : "border border-[#b14eff]/[0.06] hover:border-[#b14eff]/15"
-      }`}>
-      <div className="aspect-square relative overflow-hidden bg-white/[0.02]">
-        {track.coverUrl ? (
-          <img src={track.coverUrl} alt={track.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center" style={{ background: "linear-gradient(135deg, rgba(255,45,139,0.08), rgba(177,78,255,0.08))" }}>
-            <span className="text-4xl opacity-40">🎵</span>
-          </div>
-        )}
-
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0a0812]/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300">
-          <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between">
-            {track.audioUrl && (
-              <button onClick={(e) => { e.stopPropagation(); onPlay(); }}
-                className={`w-10 h-10 rounded-full flex items-center justify-center text-sm transition-all ${
-                  isPlaying ? "bg-white text-black" : "bg-gradient-to-r from-[#ff2d8b] to-[#b14eff] text-white hover:scale-110 shadow-[0_0_15px_rgba(177,78,255,0.3)]"
-                }`}>
-                {isPlaying ? "⏸" : "▶"}
-              </button>
-            )}
-            <button onClick={(e) => { e.stopPropagation(); onDelete(); }}
-              className="text-[10px] text-red-400/60 hover:text-red-300 font-mono tracking-wider transition-colors">
-              DEL
-            </button>
-          </div>
-        </div>
-
-        {isPlaying && (
-          <div className="absolute top-2.5 right-2.5">
-            <div className="flex items-center gap-1 bg-black/50 backdrop-blur-sm rounded-full px-2 py-0.5 border border-[#b14eff]/20">
-              <span className="rec-dot" style={{ width: 4, height: 4 }} />
-              <span className="text-[9px] font-mono text-white/80">PLAYING</span>
+    <div className={`rounded-xl border transition-all duration-300 overflow-hidden ${
+      isActive
+        ? "border-[#b14eff]/30 bg-[#b14eff]/[0.04]"
+        : "border-[#b14eff]/[0.06] bg-white/[0.01] hover:bg-white/[0.02] hover:border-[#b14eff]/10"
+    }`}>
+      <div className="flex items-center gap-3 p-3 cursor-pointer" onClick={onToggleExpand}>
+        <div className="relative w-12 h-12 md:w-14 md:h-14 rounded-lg overflow-hidden shrink-0 group" onClick={(e) => { e.stopPropagation(); onPlay(); }}>
+          {track.coverUrl ? (
+            <img src={track.coverUrl} alt={track.title} className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#ff2d8b]/10 to-[#b14eff]/10">
+              <Music2 size={18} className="text-[#b14eff]/40" />
+            </div>
+          )}
+          <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/40 transition-colors">
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+              isActive
+                ? "bg-white text-black scale-100"
+                : "bg-gradient-to-r from-[#ff2d8b] to-[#b14eff] text-white scale-0 group-hover:scale-100"
+            }`}>
+              {isActive ? <Pause size={12} /> : <Play size={12} className="ml-0.5" />}
             </div>
           </div>
-        )}
-      </div>
-
-      <div className="p-3" style={{ background: "rgba(17,14,31,0.8)" }}>
-        <h3 className="font-medium text-sm truncate">{track.title}</h3>
-        <div className="flex items-center gap-2 mt-1.5">
-          {track.genre && (
-            <Badge variant="outline" className="text-[10px] border-[#b14eff]/[0.08] px-1.5 py-0 text-muted-foreground">
-              {track.genre.split(",")[0]}
-            </Badge>
-          )}
-          <span className="text-[10px] text-muted-foreground font-mono">{track.bpm} BPM</span>
         </div>
-      </div>
-    </div>
-  );
-}
 
-/* ─── Track Detail ───────────────────────────────────────────────────────── */
-
-function TrackDetail({ track, onClose, formatDate, isPlaying, onPlay }: {
-  track: Track; onClose: () => void; formatDate: (ts: { seconds: number }) => string;
-  isPlaying: boolean; onPlay: () => void;
-}) {
-  const panelRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (panelRef.current) {
-      gsap.fromTo(panelRef.current, { x: 20, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" });
-    }
-  }, [track.id]);
-
-  return (
-    <div ref={panelRef} className="w-80 synth-card rounded-xl p-5 space-y-4 sticky top-8 h-fit">
-      <div className="flex items-center justify-between">
-        <h3 className="font-bold truncate flex-1">{track.title}</h3>
-        <button onClick={onClose} className="text-muted-foreground hover:text-white text-lg ml-2 transition-colors">×</button>
-      </div>
-
-      {track.coverUrl && (
-        <div className="relative group rounded-lg overflow-hidden neon-border">
-          <img src={track.coverUrl} alt={track.title} className="w-full aspect-square object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#0a0812]/40 to-transparent" />
-          {track.audioUrl && (
-            <button onClick={onPlay}
-              className={`absolute inset-0 flex items-center justify-center rounded-lg transition-all ${
-                isPlaying ? "bg-black/30" : "bg-transparent group-hover:bg-black/30"
-              }`}>
-              <span className={`w-14 h-14 rounded-full flex items-center justify-center text-lg transition-all ${
-                isPlaying ? "bg-white text-black" : "bg-gradient-to-r from-[#ff2d8b] to-[#b14eff] text-white scale-0 group-hover:scale-100 shadow-[0_0_20px_rgba(177,78,255,0.3)]"
-              }`}>
-                {isPlaying ? "⏸" : "▶"}
-              </span>
-            </button>
-          )}
-        </div>
-      )}
-
-      <div className="space-y-2.5 text-sm">
-        {track.genre && <DetailRow label="Genre" value={track.genre} />}
-        {track.mood && <DetailRow label="Mood" value={track.mood} />}
-        <DetailRow label="BPM" value={String(track.bpm)} mono />
-        <DetailRow label="Created" value={formatDate(track.createdAt)} />
-      </div>
-
-      {track.lyrics && (
-        <details className="group">
-          <summary className="text-xs font-medium text-muted-foreground cursor-pointer hover:text-white transition-colors flex items-center gap-1">
-            <span className="group-open:rotate-90 transition-transform text-[10px]">▶</span> Lyrics
-          </summary>
-          <p className="mt-3 text-xs leading-relaxed whitespace-pre-line max-h-48 overflow-y-auto font-mono text-muted-foreground pr-2">
-            {track.lyrics}
-          </p>
-        </details>
-      )}
-    </div>
-  );
-}
-
-function DetailRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <div className="flex justify-between">
-      <span className="text-muted-foreground">{label}</span>
-      <span className={mono ? "font-mono text-[#b14eff]" : ""}>{value}</span>
-    </div>
-  );
-}
-
-/* ─── Now Playing Bar ────────────────────────────────────────────────────── */
-
-function NowPlayingBar({ track, audioRef, isPlaying, onToggle, onStop }: {
-  track: Track; audioRef: React.RefObject<HTMLAudioElement | null>;
-  isPlaying: boolean; onToggle: () => void; onStop: () => void;
-}) {
-  const [progress, setProgress] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const barRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    const update = () => {
-      setCurrentTime(audio.currentTime);
-      setDuration(audio.duration || 0);
-      if (audio.duration) setProgress((audio.currentTime / audio.duration) * 100);
-    };
-    audio.addEventListener("timeupdate", update);
-    return () => audio.removeEventListener("timeupdate", update);
-  }, [audioRef]);
-
-  useEffect(() => {
-    if (barRef.current) {
-      gsap.fromTo(barRef.current, { y: 80, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: "power3.out" });
-    }
-  }, [track.id]);
-
-  const seek = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!audioRef.current) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const pct = (e.clientX - rect.left) / rect.width;
-    audioRef.current.currentTime = pct * (audioRef.current.duration || 0);
-  };
-
-  const fmt = (s: number) => `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, "0")}`;
-
-  return (
-    <div ref={barRef} className="fixed bottom-0 left-0 right-0 z-50">
-      <div className="relative h-1 bg-white/[0.04] cursor-pointer group" onClick={seek}>
-        <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-[#ff2d8b] via-[#b14eff] to-[#00f0ff] transition-all"
-          style={{ width: `${progress}%` }} />
-        <div className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-white shadow-[0_0_8px_rgba(177,78,255,0.4)] opacity-0 group-hover:opacity-100 transition-opacity"
-          style={{ left: `calc(${progress}% - 5px)` }} />
-      </div>
-      <div className="border-t border-[#b14eff]/[0.06] px-6 py-3 flex items-center gap-4"
-        style={{ background: "rgba(10,8,18,0.95)", backdropFilter: "blur(30px)" }}>
-        {track.coverUrl && <img src={track.coverUrl} alt="" className="w-11 h-11 rounded-lg object-cover shadow-lg" />}
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium truncate">{track.title}</p>
-          <p className="text-xs text-muted-foreground truncate">{track.genre}</p>
+          <h3 className="text-sm font-medium truncate">{track.title}</h3>
+          <div className="flex items-center gap-2 mt-0.5">
+            {track.genre && (
+              <span className="text-[10px] text-muted-foreground truncate">{track.genre.split(",")[0]}</span>
+            )}
+            <span className="text-[10px] text-muted-foreground/50">•</span>
+            <span className="text-[10px] text-muted-foreground font-mono">{track.bpm || "—"} BPM</span>
+          </div>
         </div>
-        <span className="text-[10px] font-mono text-muted-foreground">{fmt(currentTime)} / {fmt(duration)}</span>
-        <div className="flex items-center gap-2">
-          <button onClick={onToggle}
-            className="w-9 h-9 rounded-full bg-gradient-to-r from-[#ff2d8b] to-[#b14eff] hover:opacity-80 flex items-center justify-center text-white text-sm transition-all shadow-[0_0_12px_rgba(177,78,255,0.2)]">
-            {isPlaying ? "⏸" : "▶"}
-          </button>
-          <button onClick={onStop}
-            className="w-8 h-8 rounded-full bg-white/[0.05] hover:bg-white/[0.1] flex items-center justify-center text-xs text-muted-foreground transition-all">
-            ⏹
+
+        <div className="hidden sm:flex items-center gap-3 text-[11px] text-muted-foreground shrink-0">
+          <span className="flex items-center gap-1"><Eye size={11} /> {track.plays || 0}</span>
+          <span>{formatDate(track.createdAt)}</span>
+        </div>
+
+        <div className="flex items-center gap-1 shrink-0">
+          <VisibilityBadge isPublic={track.isPublic} />
+          <button
+            onClick={(e) => { e.stopPropagation(); onToggleExpand(); }}
+            className="p-1.5 text-muted-foreground hover:text-white transition-colors"
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" className={`transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}>
+              <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+            </svg>
           </button>
         </div>
       </div>
+
+      {isExpanded && (
+        <div className="px-3 pb-3 pt-1 border-t border-[#b14eff]/[0.04]">
+          <div className="flex flex-col sm:flex-row gap-3">
+            {track.coverUrl && (
+              <img src={track.coverUrl} alt={track.title}
+                className="w-full sm:w-32 aspect-square rounded-lg object-cover sm:shrink-0" />
+            )}
+
+            <div className="flex-1 space-y-3">
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {track.genre && <DetailItem label="Genre" value={track.genre} />}
+                {track.mood && <DetailItem label="Mood" value={track.mood} />}
+                <DetailItem label="BPM" value={`${track.bpm || "—"}`} />
+                <DetailItem label="Created" value={formatDate(track.createdAt)} />
+                <DetailItem label="Plays" value={`${track.plays || 0}`} />
+                <DetailItem label="Likes" value={`${track.likes || 0}`} />
+              </div>
+
+              {track.lyrics && (
+                <details className="group">
+                  <summary className="text-[11px] font-medium text-muted-foreground cursor-pointer hover:text-white transition-colors">
+                    Show lyrics
+                  </summary>
+                  <p className="mt-2 text-[11px] leading-relaxed whitespace-pre-line max-h-32 overflow-y-auto font-mono text-muted-foreground/80">
+                    {track.lyrics}
+                  </p>
+                </details>
+              )}
+
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  onClick={onTogglePublic}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    track.isPublic
+                      ? "bg-[#b14eff]/10 text-[#b14eff] border border-[#b14eff]/20 hover:bg-[#b14eff]/15"
+                      : "bg-white/[0.03] text-muted-foreground border border-white/[0.06] hover:border-white/10"
+                  }`}
+                >
+                  {track.isPublic ? <Globe size={12} /> : <Lock size={12} />}
+                  {track.isPublic ? "Public" : "Private"}
+                </button>
+
+                <div className="flex-1" />
+
+                <button
+                  onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-red-400/70 hover:text-red-300 hover:bg-red-500/[0.06] border border-transparent hover:border-red-500/10 transition-all"
+                >
+                  <Trash2 size={12} /> Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-/* ─── Empty State ────────────────────────────────────────────────────────── */
+function VisibilityBadge({ isPublic }: { isPublic: boolean }) {
+  return (
+    <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${
+      isPublic
+        ? "bg-[#b14eff]/10 text-[#b14eff]"
+        : "bg-white/[0.04] text-muted-foreground"
+    }`}>
+      {isPublic ? <Globe size={9} /> : <Lock size={9} />}
+      <span className="hidden sm:inline">{isPublic ? "Public" : "Private"}</span>
+    </span>
+  );
+}
+
+function DetailItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <span className="text-muted-foreground/60">{label}</span>
+      <p className="font-medium mt-0.5 truncate">{value}</p>
+    </div>
+  );
+}
+
+function LoadingState() {
+  return (
+    <div className="flex items-center justify-center py-20">
+      <div className="w-6 h-6 border-2 border-[#b14eff] border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+}
 
 function EmptyState({ hasSearch }: { hasSearch: boolean }) {
   return (
-    <div className="flex flex-col items-center justify-center py-24 gap-5">
-      <div className="w-20 h-20 rounded-full flex items-center justify-center neon-border synth-float"
-        style={{ background: "linear-gradient(135deg, rgba(255,45,139,0.05), rgba(177,78,255,0.05))" }}>
-        <span className="text-3xl opacity-50">{hasSearch ? "🔍" : "💿"}</span>
+    <div className="flex flex-col items-center justify-center py-20 gap-5">
+      <div
+        className="w-20 h-20 rounded-full flex items-center justify-center synth-float"
+        style={{
+          background: "linear-gradient(135deg, rgba(255,45,139,0.05), rgba(177,78,255,0.05))",
+          border: "1px solid rgba(177,78,255,0.1)",
+        }}
+      >
+        <Music2 size={28} className="text-[#b14eff]/40" />
       </div>
       <div className="text-center space-y-1.5">
         <h3 className="text-lg font-medium">{hasSearch ? "No tracks found" : "No recordings yet"}</h3>
         <p className="text-sm text-muted-foreground max-w-xs">
-          {hasSearch ? "Try a different search term" : "Head to the Studio to create your first track — it will appear here automatically"}
+          {hasSearch ? "Try a different search term" : "Head to the Studio to create your first track"}
         </p>
       </div>
       {!hasSearch && (
-        <a href="/studio">
-          <Button className="bg-gradient-to-r from-[#ff2d8b] via-[#b14eff] to-[#00f0ff] hover:opacity-90 text-white shadow-[0_0_20px_rgba(177,78,255,0.15)] mt-2">
+        <Link href="/studio">
+          <Button className="bg-gradient-to-r from-[#ff2d8b] via-[#b14eff] to-[#00f0ff] hover:opacity-90 text-white shadow-[0_0_20px_rgba(177,78,255,0.15)]">
             Open Studio ✦
           </Button>
-        </a>
+        </Link>
       )}
     </div>
   );

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import gsap from "gsap";
 
 export default function LoginPage() {
-  const { user, loading, signIn } = useAuth();
+  const { user, profile, loading, profileLoading, signIn } = useAuth();
   const router = useRouter();
   const titleRef = useRef<HTMLHeadingElement>(null);
   const subtitleRef = useRef<HTMLParagraphElement>(null);
@@ -15,10 +15,11 @@ export default function LoginPage() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!loading && user) {
-      router.push("/studio");
+    if (loading || profileLoading) return;
+    if (user) {
+      router.push(profile?.username ? "/" : "/onboarding");
     }
-  }, [user, loading, router]);
+  }, [user, profile, loading, profileLoading, router]);
 
   useEffect(() => {
     const ctx = gsap.context(() => {

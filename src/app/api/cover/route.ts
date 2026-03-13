@@ -19,7 +19,7 @@ The image should NOT contain any text. Focus on abstract or symbolic imagery tha
 Style: dark, moody, high contrast, with subtle neon accents. Think vinyl record cover art meets modern digital art.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3-pro-image-preview",
+      model: "gemini-3.1-flash-image-preview",
       contents: prompt,
       config: {
         responseModalities: ["image", "text"],

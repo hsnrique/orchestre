@@ -32,7 +32,7 @@ type DescribeMode = "simple" | "advanced";
 type MusicEngine = "minimax" | "suno";
 
 export default function StudioPage() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [step, setStep] = useState<Step>("describe");
   const [describeMode, setDescribeMode] = useState<DescribeMode>("simple");
   const [engine, setEngine] = useState<MusicEngine>("minimax");
@@ -50,6 +50,7 @@ export default function StudioPage() {
   const [lyricsReady, setLyricsReady] = useState(false);
   const [coverReady, setCoverReady] = useState(false);
   const [musicReady, setMusicReady] = useState(false);
+  const [isPublic, setIsPublic] = useState(true);
   const [saved, setSaved] = useState(false);
   const [creatingPhase, setCreatingPhase] = useState("");
   const [error, setError] = useState("");
@@ -90,12 +91,16 @@ export default function StudioPage() {
         savedAudioUrl = await getDownloadURL(audioRef);
       }
       await addDoc(collection(db, "tracks"), {
-        userId: user.uid, title: genTitle, lyrics: genLyrics,
+        userId: user.uid,
+        username: profile?.username || "",
+        userAvatarUrl: profile?.avatarUrl || "",
+        title: genTitle, lyrics: genLyrics,
         genre: describeMode === "simple" ? selectedInspirations.join(", ") : selectedGenre,
         mood: describeMode === "simple" ? "" : selectedMood,
         instruments: describeMode === "simple" ? [] : selectedInstruments,
         bpm: bpm[0], coverUrl, audioUrl: savedAudioUrl, prompt: description,
-        engine,
+        engine, isPublic,
+        plays: 0, likes: 0,
         createdAt: serverTimestamp(),
       });
       setSaved(true);
@@ -201,7 +206,9 @@ export default function StudioPage() {
             selectedGenre={selectedGenre} setSelectedGenre={setSelectedGenre}
             selectedMood={selectedMood} setSelectedMood={setSelectedMood}
             selectedInstruments={selectedInstruments} toggleInstrument={toggleInstrument}
-            bpm={bpm} setBpm={setBpm} onStart={startCreation} />
+            bpm={bpm} setBpm={setBpm}
+            isPublic={isPublic} setIsPublic={setIsPublic}
+            onStart={startCreation} />
         )}
         {step === "creating" && (
           <CreatingStep phase={creatingPhase} error={error}
@@ -271,6 +278,7 @@ function DescribeStep(props: {
   selectedMood: string; setSelectedMood: (v: string) => void;
   selectedInstruments: string[]; toggleInstrument: (v: string) => void;
   bpm: number[]; setBpm: (v: number[]) => void;
+  isPublic: boolean; setIsPublic: (v: boolean) => void;
   onStart: () => void;
 }) {
   const canProceed = props.mode === "simple" ? !!props.description
@@ -332,6 +340,19 @@ function DescribeStep(props: {
         <p className="text-xs text-muted-foreground">
           {props.engine === "minimax" ? "Fast generation (~2 min) with MiniMax Music v2" : "Premium quality with Suno V5 (~3 min)"}
         </p>
+      </section>
+
+      <section className="flex items-center justify-between p-3 rounded-lg bg-white/[0.02] border border-[#b14eff]/[0.06]">
+        <div>
+          <span className="text-sm font-medium">{props.isPublic ? "Public" : "Private"}</span>
+          <p className="text-xs text-muted-foreground">
+            {props.isPublic ? "Visible on your profile and feed" : "Only you can see this track"}
+          </p>
+        </div>
+        <button onClick={() => props.setIsPublic(!props.isPublic)}
+          className={`w-10 h-5 rounded-full transition-colors relative ${props.isPublic ? "bg-[#b14eff]" : "bg-white/10"}`}>
+          <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-transform ${props.isPublic ? "translate-x-5" : "translate-x-0.5"}`} />
+        </button>
       </section>
 
       <Button onClick={props.onStart} disabled={!canProceed}
