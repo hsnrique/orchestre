@@ -3,6 +3,7 @@ import { Inter, Space_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
 import { GlobalAudioProvider, GlobalPlayerBar } from "@/components/global-player";
+import { AccessGate } from "@/components/access-gate";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -24,12 +25,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className="dark">
       <body className={`${inter.variable} ${spaceMono.variable} antialiased`}>
-        <AuthProvider>
-          <div className="scanlines" />
-          {children}
-          <GlobalAudioProvider />
-          <GlobalPlayerBar />
-        </AuthProvider>
+        <AccessGate>
+          <AuthProvider>
+            <div className="scanlines" />
+            {children}
+            <GlobalAudioProvider />
+            <GlobalPlayerBar />
+          </AuthProvider>
+        </AccessGate>
       </body>
     </html>
   );
