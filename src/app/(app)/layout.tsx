@@ -49,8 +49,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const isProfileActive = profile?.username ? pathname === `/${profile.username}` : false;
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row pb-[calc(56px+64px)] md:pb-[64px]">
-      <aside className="hidden md:flex w-56 border-r border-[#b14eff]/[0.06] flex-col justify-between p-4 synth-grid-bg sticky top-0 h-screen shrink-0"
+    <div className="min-h-screen flex flex-col md:flex-row pb-[calc(56px+64px)] md:pb-16">
+      <aside className="hidden md:flex w-56 border-r border-[#b14eff]/[0.06] flex-col justify-between p-4 synth-grid-bg sticky top-0 h-[calc(100vh-64px)] shrink-0 overflow-hidden"
         style={{ background: "linear-gradient(180deg, rgba(17,14,31,0.97) 0%, rgba(10,8,18,0.99) 100%)" }}>
         <div className="flex flex-col gap-8">
           <Link href="/" className="flex items-center gap-3 px-2">
@@ -136,7 +136,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       </nav>
 
-      <main ref={mainRef} className="flex-1 overflow-y-auto synth-grid-bg min-w-0">
+      <main ref={mainRef} className="flex-1 overflow-y-auto synth-grid-bg min-w-0 md:h-[calc(100vh-64px)]">
         {children}
       </main>
     </div>
