@@ -7,7 +7,7 @@ import { collection, query, where, orderBy, getDocs, deleteDoc, doc, updateDoc }
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { usePlayerStore } from "@/stores/player-store";
-import { Play, Pause, Trash2, Search, Globe, Lock, Eye, Music2 } from "lucide-react";
+import { Play, Pause, Trash2, Search, Globe, Lock, Eye, Music2, PlayCircle, PauseCircle } from "lucide-react";
 import gsap from "gsap";
 import Link from "next/link";
 
@@ -189,6 +189,17 @@ function TrackRow({ track, isActive, isExpanded, onToggleExpand, onPlay, onDelet
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={(e) => { e.stopPropagation(); onPlay(); }}
+            className={`p-1.5 rounded-full transition-all ${
+              isActive
+                ? "text-[#b14eff] hover:text-[#b14eff]/80"
+                : "text-muted-foreground hover:text-white"
+            }`}
+            title={isActive ? "Pause" : "Play"}
+          >
+            {isActive ? <PauseCircle size={20} /> : <PlayCircle size={20} />}
+          </button>
           <VisibilityBadge isPublic={track.isPublic} />
           <button
             onClick={(e) => { e.stopPropagation(); onToggleExpand(); }}

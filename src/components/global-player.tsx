@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { Play, Pause, SkipForward, SkipBack, Volume2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Play, Pause, SkipForward, SkipBack, Volume2, VolumeX, Shuffle, Music2 } from "lucide-react";
 import { usePlayerStore } from "@/stores/player-store";
 
 function formatTime(sec: number) {
@@ -40,18 +40,39 @@ export function GlobalPlayerBar() {
   const progress = usePlayerStore((s) => s.progress);
   const currentTime = usePlayerStore((s) => s.currentTime);
   const duration = usePlayerStore((s) => s.duration);
+  const volume = usePlayerStore((s) => s.volume);
+  const shuffle = usePlayerStore((s) => s.shuffle);
   const togglePlay = usePlayerStore((s) => s.togglePlay);
   const seek = usePlayerStore((s) => s.seek);
   const next = usePlayerStore((s) => s.next);
   const prev = usePlayerStore((s) => s.prev);
+  const setVolume = usePlayerStore((s) => s.setVolume);
+  const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
+  const [prevVolume, setPrevVolume] = useState(1);
 
-  if (!track) return null;
+  const hasTrack = !!track;
 
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const pct = (e.clientX - rect.left) / rect.width;
     seek(Math.max(0, Math.min(1, pct)));
   };
+
+  const handleMuteToggle = () => {
+    if (volume > 0) {
+      setPrevVolume(volume);
+      setVolume(0);
+    } else {
+      setVolume(prevVolume || 1);
+    }
+  };
+
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setVolume(parseFloat(e.target.value));
+  };
+
+  const isMuted = volume === 0;
+  const VolumeIcon = isMuted ? VolumeX : Volume2;
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-[100] bg-[oklch(0.08_0.02_290)] border-t border-[#b14eff]/10 backdrop-blur-xl">
@@ -66,22 +87,36 @@ export function GlobalPlayerBar() {
 
       <div className="flex items-center gap-3 px-3 py-2 md:px-4 md:py-2.5 md:gap-4">
         <div className="flex items-center gap-2.5 min-w-0 flex-1 md:gap-3">
-          {track.coverUrl && (
+          {hasTrack && track.coverUrl ? (
             <img
               src={track.coverUrl}
               alt={track.title}
               className="w-9 h-9 md:w-11 md:h-11 rounded-md object-cover border border-[#b14eff]/20 shadow-[0_0_10px_rgba(177,78,255,0.1)]"
             />
+          ) : (
+            <div className="w-9 h-9 md:w-11 md:h-11 rounded-md flex items-center justify-center bg-white/[0.03] border border-[#b14eff]/10">
+              <Music2 size={16} className="text-muted-foreground/40" />
+            </div>
           )}
           <div className="min-w-0">
-            <div className="text-xs md:text-sm font-medium truncate">{track.title}</div>
-            {track.username && (
+            <div className="text-xs md:text-sm font-medium truncate">
+              {hasTrack ? track.title : "No track selected"}
+            </div>
+            {hasTrack && track.username && (
               <div className="text-[10px] md:text-xs text-muted-foreground truncate">{track.username}</div>
             )}
           </div>
         </div>
 
         <div className="flex items-center gap-1.5 md:gap-2">
+          <button
+            onClick={toggleShuffle}
+            className={`p-1 md:p-1.5 transition-colors ${shuffle ? "text-[#b14eff]" : "text-muted-foreground hover:text-white"}`}
+            title="Shuffle"
+          >
+            <Shuffle size={13} className="md:hidden" />
+            <Shuffle size={15} className="hidden md:block" />
+          </button>
           <button onClick={prev} className="p-1 md:p-1.5 text-muted-foreground hover:text-white transition-colors">
             <SkipBack size={14} className="md:hidden" />
             <SkipBack size={16} className="hidden md:block" />
@@ -103,7 +138,24 @@ export function GlobalPlayerBar() {
           <span className="text-xs text-muted-foreground font-mono tabular-nums">
             {formatTime(currentTime)} / {formatTime(duration)}
           </span>
-          <Volume2 size={14} className="text-muted-foreground" />
+          <div className="flex items-center gap-2 group/vol">
+            <button onClick={handleMuteToggle} className="text-muted-foreground hover:text-white transition-colors">
+              <VolumeIcon size={14} />
+            </button>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={volume}
+              onChange={handleVolumeChange}
+              className="w-20 h-1 appearance-none bg-white/10 rounded-full cursor-pointer accent-[#b14eff]
+                [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3
+                [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#b14eff]
+                [&::-webkit-slider-thumb]:shadow-[0_0_6px_rgba(177,78,255,0.5)] [&::-webkit-slider-thumb]:transition-transform
+                [&::-webkit-slider-thumb]:hover:scale-125"
+            />
+          </div>
         </div>
       </div>
     </div>

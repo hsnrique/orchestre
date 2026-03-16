@@ -5,7 +5,7 @@ import { collection, query, where, orderBy, limit, getDocs, startAfter, QueryDoc
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { likeTrack, unlikeTrack, getLikedTrackIds } from "@/lib/social";
-import { Play, Heart, Headphones, Music2 } from "lucide-react";
+import { Play, Pause, Heart, Headphones, Music2 } from "lucide-react";
 import { usePlayerStore, PlayerTrack } from "@/stores/player-store";
 import Link from "next/link";
 import gsap from "gsap";
@@ -34,6 +34,7 @@ export default function HomePage() {
   const [hasMore, setHasMore] = useState(true);
   const gridRef = useRef<HTMLDivElement>(null);
   const play = usePlayerStore((s) => s.play);
+  const togglePlay = usePlayerStore((s) => s.togglePlay);
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
 
@@ -99,6 +100,7 @@ export default function HomePage() {
   }
 
   function playTrack(track: FeedTrack) {
+    if (currentTrack?.id === track.id) { togglePlay(); return; }
     const pt: PlayerTrack = {
       id: track.id, title: track.title, audioUrl: track.audioUrl,
       coverUrl: track.coverUrl, username: track.username, genre: track.genre,
@@ -140,10 +142,15 @@ export default function HomePage() {
       <div ref={gridRef} className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-4">
         {tracks.map((track) => {
           const isCurrentlyPlaying = currentTrack?.id === track.id && isPlaying;
+          const isActive = currentTrack?.id === track.id;
           const isLiked = likedIds.has(track.id);
           return (
             <div key={track.id}
-              className="track-card group cursor-pointer rounded-xl overflow-hidden bg-white/[0.02] border border-[#b14eff]/[0.06] hover:border-[#b14eff]/20 transition-all duration-300 hover:shadow-[0_0_25px_rgba(177,78,255,0.08)]"
+              className={`track-card group cursor-pointer rounded-xl overflow-hidden transition-all duration-300 ${
+                isActive
+                  ? "bg-[#b14eff]/[0.04] border border-[#b14eff]/30 shadow-[0_0_25px_rgba(177,78,255,0.12)]"
+                  : "bg-white/[0.02] border border-[#b14eff]/[0.06] hover:border-[#b14eff]/20 hover:shadow-[0_0_25px_rgba(177,78,255,0.08)]"
+              }`}
               onClick={() => playTrack(track)}>
               <div className="relative aspect-square">
                 {track.coverUrl ? (
@@ -155,9 +162,9 @@ export default function HomePage() {
                 )}
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
                   <div className={`w-12 h-12 rounded-full bg-gradient-to-r from-[#ff2d8b] to-[#b14eff] flex items-center justify-center shadow-lg transition-all duration-300 ${
-                    isCurrentlyPlaying ? "scale-100 opacity-100" : "scale-75 opacity-0 group-hover:scale-100 group-hover:opacity-100"
+                    isActive ? "scale-100 opacity-100" : "scale-75 opacity-0 group-hover:scale-100 group-hover:opacity-100"
                   }`}>
-                    <Play size={20} className="text-white ml-0.5" fill="white" />
+                    {isCurrentlyPlaying ? <Pause size={18} className="text-white" fill="white" /> : <Play size={20} className="text-white ml-0.5" fill="white" />}
                   </div>
                 </div>
                 {track.genre && (
@@ -168,7 +175,7 @@ export default function HomePage() {
               </div>
 
               <div className="p-3 space-y-1.5">
-                <h3 className="text-sm font-medium truncate">{track.title}</h3>
+                <h3 className={`text-sm font-medium truncate ${isActive ? "text-[#b14eff]" : ""}`}>{track.title}</h3>
                 <Link href={`/${track.username}`} onClick={(e) => e.stopPropagation()}
                   className="flex items-center gap-2 hover:opacity-80 transition-opacity">
                   {track.userAvatarUrl && (

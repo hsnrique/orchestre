@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 import { incrementPlayCount } from "@/lib/social";
 
 export interface PlayerTrack {
@@ -18,6 +19,7 @@ interface PlayerState {
   currentTime: number;
   duration: number;
   volume: number;
+  shuffle: boolean;
   audioElement: HTMLAudioElement | null;
 }
 
@@ -31,96 +33,128 @@ interface PlayerActions {
   next: () => void;
   prev: () => void;
   setVolume: (v: number) => void;
+  toggleShuffle: () => void;
   updateProgress: (time: number, dur: number) => void;
   onEnded: () => void;
 }
 
-export const usePlayerStore = create<PlayerState & PlayerActions>((set, get) => ({
-  currentTrack: null,
-  queue: [],
-  isPlaying: false,
-  progress: 0,
-  currentTime: 0,
-  duration: 0,
-  volume: 1,
-  audioElement: null,
+type PlayerStore = PlayerState & PlayerActions;
 
-  setAudioElement: (el) => set({ audioElement: el }),
-
-  play: (track, queue) => {
-    const { audioElement } = get();
-    if (!audioElement) return;
-    audioElement.src = track.audioUrl;
-    audioElement.play();
-    set({
-      currentTrack: track,
-      isPlaying: true,
+export const usePlayerStore = create<PlayerStore>()(
+  persist(
+    (set, get) => ({
+      currentTrack: null,
+      queue: [],
+      isPlaying: false,
       progress: 0,
       currentTime: 0,
-      ...(queue ? { queue } : {}),
-    });
-    incrementPlayCount(track.id).catch(() => {});
-  },
+      duration: 0,
+      volume: 1,
+      shuffle: false,
+      audioElement: null,
 
-  pause: () => {
-    get().audioElement?.pause();
-    set({ isPlaying: false });
-  },
+      setAudioElement: (el) => set({ audioElement: el }),
 
-  resume: () => {
-    get().audioElement?.play();
-    set({ isPlaying: true });
-  },
+      play: (track, queue) => {
+        const { audioElement } = get();
+        if (!audioElement) return;
+        audioElement.src = track.audioUrl;
+        audioElement.volume = get().volume;
+        audioElement.play();
+        set({
+          currentTrack: track,
+          isPlaying: true,
+          progress: 0,
+          currentTime: 0,
+          ...(queue ? { queue } : {}),
+        });
+        incrementPlayCount(track.id).catch(() => {});
+      },
 
-  togglePlay: () => {
-    const { isPlaying } = get();
-    if (isPlaying) get().pause();
-    else get().resume();
-  },
+      pause: () => {
+        get().audioElement?.pause();
+        set({ isPlaying: false });
+      },
 
-  seek: (pct) => {
-    const { audioElement } = get();
-    if (audioElement && audioElement.duration) {
-      audioElement.currentTime = pct * audioElement.duration;
+      resume: () => {
+        const { audioElement, currentTrack } = get();
+        if (!audioElement) return;
+        if (!audioElement.src && currentTrack) {
+          audioElement.src = currentTrack.audioUrl;
+          audioElement.volume = get().volume;
+        }
+        audioElement.play().catch(() => {});
+        set({ isPlaying: true });
+      },
+
+      togglePlay: () => {
+        const { isPlaying } = get();
+        if (isPlaying) get().pause();
+        else get().resume();
+      },
+
+      seek: (pct) => {
+        const { audioElement } = get();
+        if (audioElement && audioElement.duration) {
+          audioElement.currentTime = pct * audioElement.duration;
+        }
+      },
+
+      next: () => {
+        const { queue, currentTrack, shuffle } = get();
+        if (!currentTrack || queue.length === 0) return;
+        if (shuffle && queue.length > 1) {
+          const others = queue.filter((t) => t.id !== currentTrack.id);
+          const picked = others[Math.floor(Math.random() * others.length)];
+          if (picked) get().play(picked);
+          return;
+        }
+        const idx = queue.findIndex((t) => t.id === currentTrack.id);
+        const nextTrack = queue[(idx + 1) % queue.length];
+        if (nextTrack) get().play(nextTrack);
+      },
+
+      prev: () => {
+        const { queue, currentTrack } = get();
+        if (!currentTrack || queue.length === 0) return;
+        const idx = queue.findIndex((t) => t.id === currentTrack.id);
+        const prevTrack = queue[(idx - 1 + queue.length) % queue.length];
+        if (prevTrack) get().play(prevTrack);
+      },
+
+      setVolume: (v) => {
+        const { audioElement } = get();
+        if (audioElement) audioElement.volume = v;
+        set({ volume: v });
+      },
+
+      toggleShuffle: () => set((s) => ({ shuffle: !s.shuffle })),
+
+      updateProgress: (time, dur) => {
+        set({
+          currentTime: time,
+          duration: dur,
+          progress: dur > 0 ? (time / dur) * 100 : 0,
+        });
+      },
+
+      onEnded: () => {
+        const { queue, currentTrack } = get();
+        if (queue.length > 1 && currentTrack) {
+          get().next();
+        } else {
+          set({ isPlaying: false, progress: 0, currentTime: 0 });
+        }
+      },
+    }),
+    {
+      name: "orchestre-player",
+      partialize: (state: PlayerStore) => ({
+        volume: state.volume,
+        shuffle: state.shuffle,
+        currentTrack: state.currentTrack,
+        queue: state.queue,
+      }),
     }
-  },
-
-  next: () => {
-    const { queue, currentTrack } = get();
-    if (!currentTrack || queue.length === 0) return;
-    const idx = queue.findIndex((t) => t.id === currentTrack.id);
-    const nextTrack = queue[(idx + 1) % queue.length];
-    if (nextTrack) get().play(nextTrack);
-  },
-
-  prev: () => {
-    const { queue, currentTrack } = get();
-    if (!currentTrack || queue.length === 0) return;
-    const idx = queue.findIndex((t) => t.id === currentTrack.id);
-    const prevTrack = queue[(idx - 1 + queue.length) % queue.length];
-    if (prevTrack) get().play(prevTrack);
-  },
-
-  setVolume: (v) => {
-    const { audioElement } = get();
-    if (audioElement) audioElement.volume = v;
-    set({ volume: v });
-  },
-
-  updateProgress: (time, dur) => {
-    set({
-      currentTime: time,
-      duration: dur,
-      progress: dur > 0 ? (time / dur) * 100 : 0,
-    });
-  },
-
-  onEnded: () => {
-    const { queue, currentTrack } = get();
-    if (queue.length > 1 && currentTrack) {
-      get().next();
-    } else {
-      set({ isPlaying: false, progress: 0, currentTime: 0 });
-    }
-  },
-}));
+  )
+);

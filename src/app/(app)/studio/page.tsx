@@ -11,6 +11,7 @@ import { db, storage } from "@/lib/firebase";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { INSPIRATIONS } from "@/lib/inspirations";
+import { usePlayerStore } from "@/stores/player-store";
 import gsap from "gsap";
 
 const GENRES = [
@@ -449,11 +450,7 @@ function ResultStep(props: {
   saved: boolean; onNewTrack: () => void;
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const { play, togglePlay, currentTrack, isPlaying, progress, currentTime, duration, seek } = usePlayerStore();
 
   useEffect(() => {
     if (cardRef.current) {
@@ -463,38 +460,28 @@ function ResultStep(props: {
   }, []);
 
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    const onTime = () => {
-      setCurrentTime(audio.currentTime);
-      setDuration(audio.duration || 0);
-      setProgress(audio.duration ? (audio.currentTime / audio.duration) * 100 : 0);
-    };
-    const onEnd = () => setIsPlaying(false);
-    audio.addEventListener("timeupdate", onTime);
-    audio.addEventListener("ended", onEnd);
-    return () => { audio.removeEventListener("timeupdate", onTime); audio.removeEventListener("ended", onEnd); };
-  }, []);
+    if (props.audioUrl && currentTrack?.id !== `gen-${props.title}`) {
+      play({
+        id: `gen-${props.title}`,
+        title: props.title,
+        audioUrl: props.audioUrl,
+        coverUrl: props.coverImage,
+      });
+    }
+  }, [props.audioUrl]);
 
-  const togglePlay = () => {
-    if (!audioRef.current) return;
-    if (isPlaying) { audioRef.current.pause(); } else { audioRef.current.play(); }
-    setIsPlaying(!isPlaying);
-  };
+  const isThisPlaying = currentTrack?.id === `gen-${props.title}` && isPlaying;
 
-  const seek = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!audioRef.current) return;
+  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const pct = (e.clientX - rect.left) / rect.width;
-    audioRef.current.currentTime = pct * (audioRef.current.duration || 0);
+    seek(Math.max(0, Math.min(1, pct)));
   };
 
   const fmt = (s: number) => `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, "0")}`;
 
   return (
     <div className="flex flex-col items-center gap-8 py-4">
-      <audio ref={audioRef} src={props.audioUrl} preload="metadata" />
-
       <div ref={cardRef} className="w-full max-w-lg">
         <div className="rounded-2xl overflow-hidden synth-card">
           {props.coverImage && (
@@ -511,7 +498,7 @@ function ResultStep(props: {
 
               <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                 <div className="w-16 h-16 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center border border-[#b14eff]/20 shadow-[0_0_25px_rgba(177,78,255,0.2)]">
-                  <span className="text-2xl text-white ml-1">{isPlaying ? "⏸" : "▶"}</span>
+                  <span className="text-2xl text-white ml-1">{isThisPlaying ? "⏸" : "▶"}</span>
                 </div>
               </div>
 
@@ -525,7 +512,7 @@ function ResultStep(props: {
             {!props.coverImage && <h2 className="text-2xl font-bold">{props.title}</h2>}
 
             <div className="space-y-2">
-              <div className="relative h-1.5 bg-white/[0.06] rounded-full cursor-pointer group" onClick={seek}>
+              <div className="relative h-1.5 bg-white/[0.06] rounded-full cursor-pointer group" onClick={handleSeek}>
                 <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-[#ff2d8b] via-[#b14eff] to-[#00f0ff] rounded-full transition-all"
                   style={{ width: `${progress}%` }} />
                 <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white shadow-[0_0_8px_rgba(177,78,255,0.4)] opacity-0 group-hover:opacity-100 transition-opacity"
@@ -535,7 +522,7 @@ function ResultStep(props: {
                 <div className="flex items-center gap-3">
                   <button onClick={togglePlay}
                     className="w-9 h-9 rounded-full bg-gradient-to-r from-[#ff2d8b] to-[#b14eff] hover:opacity-80 flex items-center justify-center text-white text-sm transition-all shadow-[0_0_15px_rgba(177,78,255,0.2)]">
-                    {isPlaying ? "⏸" : "▶"}
+                    {isThisPlaying ? "⏸" : "▶"}
                   </button>
                   <span className="text-xs font-mono text-muted-foreground">{fmt(currentTime)} / {fmt(duration)}</span>
                 </div>
