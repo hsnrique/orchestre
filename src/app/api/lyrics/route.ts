@@ -5,9 +5,9 @@ const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY! });
 
 export async function POST(req: NextRequest) {
   try {
-    const { genre, mood, theme, language = "English" } = await req.json();
+    const { genre, mood, theme } = await req.json();
 
-    const prompt = `You are a world-class songwriter. Write a complete, original song in ${language}.
+    const prompt = `You are a world-class songwriter. Write a complete, original song in the same language as prompted.
 
 Genre: ${genre}
 Mood: ${mood}
