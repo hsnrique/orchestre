@@ -202,6 +202,15 @@ Set all environment variables in the Vercel dashboard under Settings → Environ
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
+## Support
+
+If you find this project useful, consider supporting the project:
+
+| | Link |
+|---|---|
+| ☕ **Buy Me a Coffee** (US/EU) | [buymeacoffee.com/hsnrique](https://buymeacoffee.com/hsnrique) |
+| 💜 **Pix** (BR) | [livepix.gg/hsnrique](https://livepix.gg/hsnrique) |
+
 ## 📄 License
 
 This project is open source under the [MIT License](LICENSE).
